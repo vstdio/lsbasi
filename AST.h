@@ -1,9 +1,10 @@
 #pragma once
+#include <map>
 #include <vector>
 #include <memory>
 #include <string>
 #include <stdexcept>
-#include <map>
+#include <boost/algorithm/string.hpp>
 
 class BinOpNode;
 class LeafNumNode;
@@ -234,15 +235,6 @@ private:
 class ExpressionCalculator : public IASTNodeVisitor
 {
 public:
-	void Traverse(const ASTNode& node)
-	{
-		node.Accept(*this);
-		for (const auto& pair : m_scope)
-		{
-			// std::cout << pair.first << " " << pair.second << std::endl;
-		}
-	}
-
 	int Calculate(const ASTNode& node)
 	{
 		node.Accept(*this);
@@ -297,7 +289,7 @@ public:
 
 	void Visit(const LeafVarNode& var) override
 	{
-		auto it = m_scope.find(var.GetName());
+		auto it = m_scope.find(boost::algorithm::to_lower_copy(var.GetName()));
 		if (it == m_scope.end())
 		{
 			throw std::runtime_error("variable is not defined");
@@ -307,7 +299,7 @@ public:
 
 	void Visit(const AssignNode& assign) override
 	{
-		m_scope[assign.GetLeft()] = Calculate(assign.GetRight());
+		m_scope[boost::algorithm::to_lower_copy(assign.GetLeft())] = Calculate(assign.GetRight());
 	}
 
 	void Visit(const CompoundNode& compound) override
@@ -318,7 +310,7 @@ public:
 		}
 	}
 
-private:
+protected:
 	std::map<std::string, int> m_scope;
 	int m_acc = 0;
 };

@@ -2,12 +2,14 @@
 #include <cctype>
 #include <cassert>
 #include <unordered_map>
+#include <boost/algorithm/string.hpp>
 
 namespace
 {
 const std::unordered_map<std::string, TokenKind> RESERVED_KEYWORDS = {
 	{ "begin", TokenKind::Begin },
-	{ "end", TokenKind::End }
+	{ "end", TokenKind::End },
+	{ "div", TokenKind::Div }
 };
 }
 
@@ -36,7 +38,7 @@ Token Lexer::Advance()
 		{
 			return ReadAsInt();
 		}
-		if (std::isalpha(mText[mPos]))
+		if (std::isalpha(mText[mPos]) || mText[mPos] == '_')
 		{
 			return ReadAsKeywordOrIdentifier();
 		}
@@ -54,11 +56,6 @@ Token Lexer::Advance()
 		{
 			++mPos;
 			return { TokenKind::Mul };
-		}
-		if (mText[mPos] == '/')
-		{
-			++mPos;
-			return { TokenKind::Div };
 		}
 		if (mText[mPos] == '(')
 		{
@@ -110,12 +107,12 @@ Token Lexer::ReadAsKeywordOrIdentifier()
 	assert(std::isalpha(mText[mPos]));
 
 	std::string chars;
-	while (mPos < mText.length() && std::isalnum(mText[mPos]))
+	while (mPos < mText.length() && (std::isalnum(mText[mPos]) || mText[mPos] == '_'))
 	{
 		chars += mText[mPos++];
 	}
 
-	auto it = RESERVED_KEYWORDS.find(chars);
+	auto it = RESERVED_KEYWORDS.find(boost::algorithm::to_lower_copy(chars));
 	if (it != RESERVED_KEYWORDS.end())
 	{
 		return { it->second };

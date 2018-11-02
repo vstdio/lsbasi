@@ -173,12 +173,16 @@ public:
 	{
 	}
 
-	int Interpret()
+	void Interpret()
 	{
 		auto root = mParser->ParseAsProgram();
-		Traverse(*root);
-		std::cout << "Root traversed!" << std::endl;
-		return 0;
+		root->Accept(*this);
+
+		std::cout << "Tree has been traversed!" << std::endl;
+		for (const auto& [name, value] : m_scope)
+		{
+			std::cout << name << " = " << value << std::endl;
+		}
 	}
 
 private:
@@ -203,15 +207,15 @@ std::vector<Token> Tokenize(const std::string& text)
 int main()
 {
 	const std::string text = R"(
-begin
+Begin
   begin
-    number := 2;
+    nUmber := 2;
     a := number;
-    b := 10 * a + 10 * number / 4;
-    c := a - - b
+    b := 10 * a + 10 * number DIV 4;
+    _c := a - - b
   end;
   x := 11;
-end.
+END.
 )";
 
 	try
