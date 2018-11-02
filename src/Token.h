@@ -1,10 +1,10 @@
 #pragma once
-#include "TokenKind.h"
+#include "TokenType.h"
 #include <optional>
 
 struct Token
 {
-	TokenKind kind;
+	TokenType type;
 	std::optional<std::string> value;
 };
 

@@ -17,16 +17,16 @@ public:
 	ASTNode::Ptr ParseAsProgram()
 	{
 		auto node = ParseAsCompound();
-		EatAndAdvance(TokenKind::Dot);
-		EatAndAdvance(TokenKind::EndOfFile);
+		EatAndAdvance(TokenType::Dot);
+		EatAndAdvance(TokenType::EndOfFile);
 		return node;
 	}
 
 	ASTNode::Ptr ParseAsCompound()
 	{
-		EatAndAdvance(TokenKind::Begin);
+		EatAndAdvance(TokenType::Begin);
 		auto node = ParseAsStatementList();
-		EatAndAdvance(TokenKind::End);
+		EatAndAdvance(TokenType::End);
 		return node;
 	}
 
@@ -34,9 +34,9 @@ public:
 	{
 		auto node = std::make_unique<CompoundNode>();
 		node->AddChild(ParseAsStatement());
-		while (mCurrentToken.kind == TokenKind::Semicolon)
+		while (mCurrentToken.type == TokenType::Semicolon)
 		{
-			EatAndAdvance(TokenKind::Semicolon);
+			EatAndAdvance(TokenType::Semicolon);
 			node->AddChild(ParseAsStatement());
 		}
 		return node;
@@ -44,11 +44,11 @@ public:
 
 	ASTNode::Ptr ParseAsStatement()
 	{
-		if (mCurrentToken.kind == TokenKind::Begin)
+		if (mCurrentToken.type == TokenType::Begin)
 		{
 			return ParseAsCompound();
 		}
-		else if (mCurrentToken.kind == TokenKind::Identifier)
+		else if (mCurrentToken.type == TokenType::Identifier)
 		{
 			return ParseAsAssignment();
 		}
@@ -61,7 +61,7 @@ public:
 	ASTNode::Ptr ParseAsAssignment()
 	{
 		auto left = ParseAsVariable();
-		EatAndAdvance(TokenKind::Assign);
+		EatAndAdvance(TokenType::Assign);
 		auto expr = ParseAsExpr();
 		return std::make_unique<AssignNode>(left->GetName(), std::move(expr));
 	}
@@ -69,38 +69,38 @@ public:
 	std::unique_ptr<LeafVarNode> ParseAsVariable()
 	{
 		auto identifier = *mCurrentToken.value;
-		EatAndAdvance(TokenKind::Identifier);
+		EatAndAdvance(TokenType::Identifier);
 		return std::make_unique<LeafVarNode>(identifier);
 	}
 
 	ASTNode::Ptr ParseAsFactor()
 	{
-		if (mCurrentToken.kind == TokenKind::Minus)
+		if (mCurrentToken.type == TokenType::Minus)
 		{
-			EatAndAdvance(TokenKind::Minus);
+			EatAndAdvance(TokenType::Minus);
 			auto node = ParseAsFactor();
 			return std::make_unique<UnOpNode>(std::move(node), UnOpNode::Minus);
 		}
-		if (mCurrentToken.kind == TokenKind::Plus)
+		if (mCurrentToken.type == TokenType::Plus)
 		{
-			EatAndAdvance(TokenKind::Plus);
+			EatAndAdvance(TokenType::Plus);
 			auto node = ParseAsFactor();
 			return std::make_unique<UnOpNode>(std::move(node), UnOpNode::Plus);
 		}
-		if (mCurrentToken.kind == TokenKind::Int)
+		if (mCurrentToken.type == TokenType::IntegerConstant)
 		{
 			const std::string lexeme = *mCurrentToken.value;
-			EatAndAdvance(TokenKind::Int);
+			EatAndAdvance(TokenType::IntegerConstant);
 			return std::make_unique<LeafNumNode>(std::stoi(lexeme));
 		}
-		else if (mCurrentToken.kind == TokenKind::LeftParen)
+		else if (mCurrentToken.type == TokenType::LeftParen)
 		{
-			EatAndAdvance(TokenKind::LeftParen);
+			EatAndAdvance(TokenType::LeftParen);
 			auto node = ParseAsExpr();
-			EatAndAdvance(TokenKind::RightParen);
+			EatAndAdvance(TokenType::RightParen);
 			return node;
 		}
-		else if (mCurrentToken.kind == TokenKind::Identifier)
+		else if (mCurrentToken.type == TokenType::Identifier)
 		{
 			return ParseAsVariable();
 		}
@@ -110,19 +110,19 @@ public:
 	ASTNode::Ptr ParseAsTerm()
 	{
 		auto node = ParseAsFactor();
-		while (mCurrentToken.kind == TokenKind::Mul || mCurrentToken.kind == TokenKind::Div)
+		while (mCurrentToken.type == TokenType::Mul || mCurrentToken.type == TokenType::IntegerDiv)
 		{
 			const auto op = mCurrentToken;
-			if (mCurrentToken.kind == TokenKind::Mul)
+			if (mCurrentToken.type == TokenType::Mul)
 			{
-				EatAndAdvance(TokenKind::Mul);
+				EatAndAdvance(TokenType::Mul);
 			}
-			else if (mCurrentToken.kind == TokenKind::Div)
+			else if (mCurrentToken.type == TokenType::IntegerDiv)
 			{
-				EatAndAdvance(TokenKind::Div);
+				EatAndAdvance(TokenType::IntegerDiv);
 			}
 			node = std::make_unique<BinOpNode>(std::move(node), ParseAsFactor(),
-				op.kind == TokenKind::Mul ? BinOpNode::Mul : BinOpNode::Div);
+				op.type == TokenType::Mul ? BinOpNode::Mul : BinOpNode::Div);
 		}
 		return node;
 	}
@@ -130,27 +130,27 @@ public:
 	ASTNode::Ptr ParseAsExpr()
 	{
 		auto node = ParseAsTerm();
-		while (mCurrentToken.kind == TokenKind::Plus || mCurrentToken.kind == TokenKind::Minus)
+		while (mCurrentToken.type == TokenType::Plus || mCurrentToken.type == TokenType::Minus)
 		{
 			const auto op = mCurrentToken;
-			if (mCurrentToken.kind == TokenKind::Plus)
+			if (mCurrentToken.type == TokenType::Plus)
 			{
-				EatAndAdvance(TokenKind::Plus);
+				EatAndAdvance(TokenType::Plus);
 			}
-			else if (mCurrentToken.kind == TokenKind::Minus)
+			else if (mCurrentToken.type == TokenType::Minus)
 			{
-				EatAndAdvance(TokenKind::Minus);
+				EatAndAdvance(TokenType::Minus);
 			}
 			node = std::make_unique<BinOpNode>(std::move(node), ParseAsTerm(),
-				op.kind == TokenKind::Plus ? BinOpNode::Plus : BinOpNode::Minus);
+				op.type == TokenType::Plus ? BinOpNode::Plus : BinOpNode::Minus);
 		}
 		return node;
 	}
 
 private:
-	void EatAndAdvance(TokenKind kind)
+	void EatAndAdvance(TokenType kind)
 	{
-		if (mCurrentToken.kind == kind)
+		if (mCurrentToken.type == kind)
 		{
 			mCurrentToken = mLexer->Advance();
 		}
@@ -196,12 +196,20 @@ std::vector<Token> Tokenize(const std::string& text)
 	while (true)
 	{
 		tokens.push_back(lexer->Advance());
-		if (tokens.back().kind == TokenKind::EndOfFile)
+		if (tokens.back().type == TokenType::EndOfFile)
 		{
 			break;
 		}
 	}
 	return tokens;
+}
+
+void DebugLexer(const std::string& text)
+{
+	for (auto&& token : Tokenize(text))
+	{
+		std::cout << ToString(token) << std::endl;
+	}
 }
 
 int main()
@@ -215,13 +223,18 @@ Begin
     _c := a - - b
   end;
   x := 11;
+  number := 3;
 END.
 )";
 
 	try
 	{
+#if 1
 		Interpreter interpreter(std::make_unique<Parser>(std::make_unique<Lexer>(text)));
 		interpreter.Interpret();
+#else
+		DebugLexer(text);
+#endif
 	}
 	catch (const std::exception& ex)
 	{

@@ -5,7 +5,7 @@
 std::string ToString(const Token& token)
 {
 	const auto fmt = boost::format("Token(%1%%2%)")
-		% ToString(token.kind)
+		% ToString(token.type)
 		% (token.value ? ", " + *token.value : "");
 	return fmt.str();
 }

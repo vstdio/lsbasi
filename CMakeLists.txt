@@ -7,13 +7,13 @@ find_package(Boost REQUIRED)
 include_directories(${Boost_INCLUDE_DIRS})
 
 add_executable(lsbasi
-	main.cpp
-	Token.cpp
-	TokenKind.cpp
-	Lexer.cpp
-	AST.h
-	Token.h
-	TokenKind.h
-	Lexer.h
+	src/main.cpp
+	src/Token.cpp
+	src/TokenType.cpp
+	src/Lexer.cpp
+	src/AST.h
+	src/Token.h
+	src/TokenType.h
+	src/Lexer.h
 )
 target_link_libraries(lsbasi ${Boost_LIBRARIES})

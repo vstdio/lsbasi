@@ -11,9 +11,10 @@ public:
 	Token Advance();
 
 private:
-	Token ReadAsInt();
+	Token ReadAsNumberConstant();
 	Token ReadAsKeywordOrIdentifier();
 
+	void SkipComment();
 	void SkipWhitespaces();
 	bool Lookahead(char ch)const;
 

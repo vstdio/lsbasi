@@ -4,8 +4,10 @@
 #include <memory>
 #include <string>
 #include <stdexcept>
+#include <algorithm>
 #include <boost/algorithm/string.hpp>
 
+// Forward declarations
 class BinOpNode;
 class LeafNumNode;
 class UnOpNode;
@@ -13,6 +15,10 @@ class LeafVarNode;
 class LeafNopNode;
 class AssignNode;
 class CompoundNode;
+class ProgramNode;
+class BlockNode;
+class VarDeclNode;
+class TypeNode;
 
 class IASTNodeVisitor
 {
@@ -25,8 +31,14 @@ public:
 	virtual void Visit(const LeafNopNode& nop) = 0;
 	virtual void Visit(const AssignNode& assign) = 0;
 	virtual void Visit(const CompoundNode& compound) = 0;
+	// TODO: add Visit methods...
 };
 
+////////////////////////////////////////////////////////
+//                                                    //
+//                    AST Nodes                       //
+//                                                    //
+////////////////////////////////////////////////////////
 class ASTNode
 {
 public:
@@ -227,6 +239,73 @@ private:
 	std::vector<ASTNode::Ptr> m_children;
 };
 
+class TypeNode : public ASTNode
+{
+public:
+	enum Type
+	{
+		Integer,
+		Real
+	};
+
+	TypeNode(Type type)
+		: m_type(type)
+	{
+	}
+
+	Type GetType()const
+	{
+		return m_type;
+	}
+
+private:
+	Type m_type;
+};
+
+class VarDeclNode : public ASTNode
+{
+public:
+	VarDeclNode(std::unique_ptr<LeafVarNode>&& name, std::unique_ptr<TypeNode>&& type)
+		: m_name(std::move(name))
+		, m_type(std::move(type))
+	{
+	}
+
+private:
+	std::unique_ptr<LeafVarNode> m_name;
+	std::unique_ptr<TypeNode> m_type;
+};
+
+class BlockNode : public ASTNode
+{
+public:
+	BlockNode(
+		std::vector<std::unique_ptr<VarDeclNode>>&& declarations,
+		std::unique_ptr<CompoundNode>&& compound)
+		: m_declarations(std::move(declarations))
+		, m_compound(std::move(compound))
+	{
+	}
+
+private:
+	std::vector<std::unique_ptr<VarDeclNode>> m_declarations;
+	std::unique_ptr<CompoundNode> m_compound;
+};
+
+class ProgramNode : public ASTNode
+{
+public:
+	ProgramNode(const std::string& name, std::unique_ptr<BlockNode>&& block)
+		: m_name(name)
+		, m_block(std::move(block))
+	{
+	}
+
+private:
+	std::string m_name;
+	std::unique_ptr<BlockNode> m_block;
+};
+
 ////////////////////////////////////////////////////////
 //                                                    //
 //                    Visitors                        //
@@ -289,7 +368,11 @@ public:
 
 	void Visit(const LeafVarNode& var) override
 	{
-		auto it = m_scope.find(boost::algorithm::to_lower_copy(var.GetName()));
+		const std::string varname = boost::algorithm::to_lower_copy(var.GetName());
+		auto it = std::find_if(m_scope.begin(), m_scope.end(), [&varname](const auto& pair) {
+			return varname == boost::algorithm::to_lower_copy(pair.first);
+		});
+
 		if (it == m_scope.end())
 		{
 			throw std::runtime_error("variable is not defined");
@@ -299,7 +382,19 @@ public:
 
 	void Visit(const AssignNode& assign) override
 	{
-		m_scope[boost::algorithm::to_lower_copy(assign.GetLeft())] = Calculate(assign.GetRight());
+		const std::string varname = boost::algorithm::to_lower_copy(assign.GetLeft());
+		auto it = std::find_if(m_scope.begin(), m_scope.end(), [&varname](const auto& pair) {
+			return varname == boost::algorithm::to_lower_copy(pair.first);
+		});
+
+		if (it == m_scope.end())
+		{
+			m_scope.emplace(assign.GetLeft(), Calculate(assign.GetRight()));
+		}
+		else
+		{
+			it->second = Calculate(assign.GetRight());
+		}
 	}
 
 	void Visit(const CompoundNode& compound) override
