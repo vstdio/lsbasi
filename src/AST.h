@@ -24,14 +24,21 @@ class IASTNodeVisitor
 {
 public:
 	virtual ~IASTNodeVisitor() = default;
+
+	// Expressions
 	virtual void Visit(const BinOpNode& binop) = 0;
 	virtual void Visit(const LeafNumNode& num) = 0;
 	virtual void Visit(const UnOpNode& unop) = 0;
 	virtual void Visit(const LeafVarNode& var) = 0;
+
+	// Statements
 	virtual void Visit(const LeafNopNode& nop) = 0;
 	virtual void Visit(const AssignNode& assign) = 0;
 	virtual void Visit(const CompoundNode& compound) = 0;
-	// TODO: add Visit methods...
+	virtual void Visit(const TypeNode& type) = 0; // ?
+	virtual void Visit(const VarDeclNode& vardecl) = 0;
+	virtual void Visit(const BlockNode& block) = 0;
+	virtual void Visit(const ProgramNode& program) = 0;
 };
 
 ////////////////////////////////////////////////////////
@@ -55,7 +62,8 @@ public:
 		Plus,
 		Minus,
 		Mul,
-		Div
+		IntegerDiv,
+		FloatDiv
 	};
 
 	explicit BinOpNode(ASTNode::Ptr&& left, ASTNode::Ptr&& right, Operator op)
@@ -129,14 +137,15 @@ private:
 class LeafNumNode : public ASTNode
 {
 public:
-	explicit LeafNumNode(int value)
+	explicit LeafNumNode(int value, bool integral = true)
 		: m_value(value)
+		, m_integral(integral)
 	{
 	}
 
-	int GetValue()const
+	double GetValue()const
 	{
-		return m_value;
+		return m_integral ? std::round(m_value) : m_value;
 	}
 
 	void Accept(IASTNodeVisitor& visitor)const override
@@ -145,7 +154,8 @@ public:
 	}
 
 private:
-	int m_value;
+	double m_value;
+	bool m_integral;
 };
 
 class LeafVarNode : public ASTNode
@@ -258,6 +268,11 @@ public:
 		return m_type;
 	}
 
+	void Accept(IASTNodeVisitor& visitor) const override
+	{
+		visitor.Visit(*this);
+	}
+
 private:
 	Type m_type;
 };
@@ -265,14 +280,29 @@ private:
 class VarDeclNode : public ASTNode
 {
 public:
-	VarDeclNode(std::unique_ptr<LeafVarNode>&& name, std::unique_ptr<TypeNode>&& type)
-		: m_name(std::move(name))
+	VarDeclNode(std::vector<std::unique_ptr<LeafVarNode>>&& vars, std::unique_ptr<TypeNode>&& type)
+		: m_vars(std::move(vars))
 		, m_type(std::move(type))
 	{
 	}
 
+	const std::vector<std::unique_ptr<LeafVarNode>> &GetVariables()const
+	{
+		return m_vars;
+	}
+
+	const TypeNode& GetTypeNode()const
+	{
+		return *m_type;
+	}
+
+	void Accept(IASTNodeVisitor& visitor) const override
+	{
+		visitor.Visit(*this);
+	}
+
 private:
-	std::unique_ptr<LeafVarNode> m_name;
+	std::vector<std::unique_ptr<LeafVarNode>> m_vars;
 	std::unique_ptr<TypeNode> m_type;
 };
 
@@ -285,6 +315,21 @@ public:
 		: m_declarations(std::move(declarations))
 		, m_compound(std::move(compound))
 	{
+	}
+
+	const std::vector<std::unique_ptr<VarDeclNode>> &GetDeclarations()const
+	{
+		return m_declarations;
+	}
+
+	const CompoundNode& GetCompound()const
+	{
+		return *m_compound;
+	}
+
+	void Accept(IASTNodeVisitor& visitor) const override
+	{
+		visitor.Visit(*this);
 	}
 
 private:
@@ -301,6 +346,21 @@ public:
 	{
 	}
 
+	std::string GetName()const
+	{
+		return m_name;
+	}
+
+	const BlockNode& GetBlock()const
+	{
+		return *m_block;
+	}
+
+	void Accept(IASTNodeVisitor& visitor) const override
+	{
+		visitor.Visit(*this);
+	}
+
 private:
 	std::string m_name;
 	std::unique_ptr<BlockNode> m_block;
@@ -314,7 +374,7 @@ private:
 class ExpressionCalculator : public IASTNodeVisitor
 {
 public:
-	int Calculate(const ASTNode& node)
+	double Calculate(const ASTNode& node)
 	{
 		node.Accept(*this);
 		return m_acc;
@@ -338,7 +398,10 @@ public:
 		case BinOpNode::Mul:
 			m_acc = Calculate(binop.GetLeft()) * Calculate(binop.GetRight());
 			break;
-		case BinOpNode::Div:
+		case BinOpNode::IntegerDiv:
+			m_acc = std::round(Calculate(binop.GetLeft()) / Calculate(binop.GetRight()));
+			break;
+		case BinOpNode::FloatDiv:
 			m_acc = Calculate(binop.GetLeft()) / Calculate(binop.GetRight());
 			break;
 		default:
@@ -405,9 +468,33 @@ public:
 		}
 	}
 
+	void Visit(const TypeNode& type) override
+	{
+		(void)type;
+	}
+
+	void Visit(const VarDeclNode& vardecl) override
+	{
+		(void)vardecl;
+	}
+
+	void Visit(const BlockNode& block) override
+	{
+		for (const auto& declaration : block.GetDeclarations())
+		{
+			Visit(*declaration);
+		}
+		Visit(block.GetCompound());
+	}
+
+	void Visit(const ProgramNode& program) override
+	{
+		Visit(program.GetBlock());
+	}
+
 protected:
-	std::map<std::string, int> m_scope;
-	int m_acc = 0;
+	std::map<std::string, double> m_scope;
+	double m_acc = 0;
 };
 
 class ReversePolishNotationTranslator : public IASTNodeVisitor
@@ -443,7 +530,7 @@ public:
 		case BinOpNode::Mul:
 			m_acc = Translate(binop.GetLeft()) + " " + Translate(binop.GetRight()) + " *";
 			break;
-		case BinOpNode::Div:
+		case BinOpNode::IntegerDiv:
 			m_acc = Translate(binop.GetLeft()) + " " + Translate(binop.GetRight()) + " /";
 			break;
 		default:
@@ -488,7 +575,7 @@ public:
 		case BinOpNode::Mul:
 			m_acc = "(* " + Translate(binop.GetLeft()) + " " + Translate(binop.GetRight()) + ")";
 			break;
-		case BinOpNode::Div:
+		case BinOpNode::IntegerDiv:
 			m_acc = "(/ " + Translate(binop.GetLeft()) + " " + Translate(binop.GetRight()) + ")";
 			break;
 		default:

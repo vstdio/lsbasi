@@ -4,6 +4,18 @@
 #include <cctype>
 #include <iostream>
 #include <cassert>
+#include <algorithm>
+
+namespace
+{
+template <typename T>
+bool AnyOf(const T& value, const std::initializer_list<T> &container)
+{
+	return std::any_of(std::begin(container), std::end(container), [&value](const T& element) {
+		return value == element;
+	});
+}
+}
 
 class Parser
 {
@@ -16,13 +28,76 @@ public:
 
 	ASTNode::Ptr ParseAsProgram()
 	{
-		auto node = ParseAsCompound();
+		EatAndAdvance(TokenType::Program);
+		auto programNameToken = mCurrentToken;
+		EatAndAdvance(TokenType::Identifier);
+		EatAndAdvance(TokenType::Semicolon);
+		auto block = ParseAsBlock();
+		auto program = std::make_unique<ProgramNode>(*programNameToken.value, std::move(block));
 		EatAndAdvance(TokenType::Dot);
 		EatAndAdvance(TokenType::EndOfFile);
-		return node;
+		return program;
 	}
 
-	ASTNode::Ptr ParseAsCompound()
+	// block:
+	//  declarations compound_statement
+	std::unique_ptr<BlockNode> ParseAsBlock()
+	{
+		auto declarations = ParseAsDeclarations();
+		auto compound = ParseAsCompound();
+		return std::make_unique<BlockNode>(std::move(declarations), std::move(compound));
+	}
+
+	// declarations:
+	//  VAR (variables_declaration SEMICOLON)+ |
+	//  empty
+	std::vector<std::unique_ptr<VarDeclNode>> ParseAsDeclarations()
+	{
+		std::vector<std::unique_ptr<VarDeclNode>> declarations;
+		if (mCurrentToken.type == TokenType::Var)
+		{
+			EatAndAdvance(TokenType::Var);
+			while (mCurrentToken.type == TokenType::Identifier)
+			{
+				declarations.emplace_back(ParseAsVariablesDeclaration());
+				EatAndAdvance(TokenType::Semicolon);
+			}
+		}
+		return declarations;
+	}
+
+	// variables_declaration:
+	//  ID (COMMA ID)* COLON type_spec
+	std::unique_ptr<VarDeclNode> ParseAsVariablesDeclaration()
+	{
+		std::vector<std::unique_ptr<LeafVarNode>> vars;
+		vars.push_back(ParseAsVariable());
+		while (mCurrentToken.type == TokenType::Comma)
+		{
+			EatAndAdvance(TokenType::Comma);
+			vars.emplace_back(ParseAsVariable());
+		}
+		EatAndAdvance(TokenType::Colon);
+		auto type = ParseAsTypeNode();
+		return std::make_unique<VarDeclNode>(std::move(vars), std::move(type));
+	}
+
+	std::unique_ptr<TypeNode> ParseAsTypeNode()
+	{
+		if (mCurrentToken.type == TokenType::Integer)
+		{
+			EatAndAdvance(TokenType::Integer);
+			return std::make_unique<TypeNode>(TypeNode::Integer);
+		}
+		else if (mCurrentToken.type == TokenType::Real)
+		{
+			EatAndAdvance(TokenType::Real);
+			return std::make_unique<TypeNode>(TypeNode::Real);
+		}
+		throw std::runtime_error("invalid variable type");
+	}
+
+	std::unique_ptr<CompoundNode> ParseAsCompound()
 	{
 		EatAndAdvance(TokenType::Begin);
 		auto node = ParseAsStatementList();
@@ -30,7 +105,7 @@ public:
 		return node;
 	}
 
-	ASTNode::Ptr ParseAsStatementList()
+	std::unique_ptr<CompoundNode> ParseAsStatementList()
 	{
 		auto node = std::make_unique<CompoundNode>();
 		node->AddChild(ParseAsStatement());
@@ -68,6 +143,7 @@ public:
 
 	std::unique_ptr<LeafVarNode> ParseAsVariable()
 	{
+		assert(mCurrentToken.type == TokenType::Identifier);
 		auto identifier = *mCurrentToken.value;
 		EatAndAdvance(TokenType::Identifier);
 		return std::make_unique<LeafVarNode>(identifier);
@@ -81,17 +157,23 @@ public:
 			auto node = ParseAsFactor();
 			return std::make_unique<UnOpNode>(std::move(node), UnOpNode::Minus);
 		}
-		if (mCurrentToken.type == TokenType::Plus)
+		else if (mCurrentToken.type == TokenType::Plus)
 		{
 			EatAndAdvance(TokenType::Plus);
 			auto node = ParseAsFactor();
 			return std::make_unique<UnOpNode>(std::move(node), UnOpNode::Plus);
 		}
-		if (mCurrentToken.type == TokenType::IntegerConstant)
+		else if (mCurrentToken.type == TokenType::IntegerConstant)
 		{
 			const std::string lexeme = *mCurrentToken.value;
 			EatAndAdvance(TokenType::IntegerConstant);
 			return std::make_unique<LeafNumNode>(std::stoi(lexeme));
+		}
+		else if (mCurrentToken.type == TokenType::RealConstant)
+		{
+			const std::string lexeme = *mCurrentToken.value;
+			EatAndAdvance(TokenType::RealConstant);
+			return std::make_unique<LeafNumNode>(std::stod(lexeme), false);
 		}
 		else if (mCurrentToken.type == TokenType::LeftParen)
 		{
@@ -110,7 +192,7 @@ public:
 	ASTNode::Ptr ParseAsTerm()
 	{
 		auto node = ParseAsFactor();
-		while (mCurrentToken.type == TokenType::Mul || mCurrentToken.type == TokenType::IntegerDiv)
+		while (AnyOf(mCurrentToken.type, { TokenType::Mul, TokenType::IntegerDiv, TokenType::FloatDiv }))
 		{
 			const auto op = mCurrentToken;
 			if (mCurrentToken.type == TokenType::Mul)
@@ -121,8 +203,13 @@ public:
 			{
 				EatAndAdvance(TokenType::IntegerDiv);
 			}
+			else if (mCurrentToken.type == TokenType::FloatDiv)
+			{
+				EatAndAdvance(TokenType::FloatDiv);
+			}
 			node = std::make_unique<BinOpNode>(std::move(node), ParseAsFactor(),
-				op.type == TokenType::Mul ? BinOpNode::Mul : BinOpNode::Div);
+				op.type == TokenType::Mul ? BinOpNode::Mul :
+				op.type == TokenType::IntegerDiv ? BinOpNode::IntegerDiv : BinOpNode::FloatDiv);
 		}
 		return node;
 	}
@@ -215,16 +302,28 @@ void DebugLexer(const std::string& text)
 int main()
 {
 	const std::string text = R"(
-Begin
-  begin
-    nUmber := 2;
-    a := number;
-    b := 10 * a + 10 * number DIV 4;
-    _c := a - - b
-  end;
-  x := 11;
-  number := 3;
-END.
+PROGRAM Part10;
+VAR
+   number     : INTEGER;
+   a, b, c, x : INTEGER;
+   y          : REAL;
+
+BEGIN {Part10}
+   BEGIN
+      number := 2;
+      a := number;
+      b := 10 * a + 10 * number DIV 4;
+      c := a - - b
+   END;
+   x := 11;
+   y := 20 / 7 + 3.14;
+   { writeln('a = ', a); }
+   { writeln('b = ', b); }
+   { writeln('c = ', c); }
+   { writeln('number = ', number); }
+   { writeln('x = ', x); }
+   { writeln('y = ', y); }
+END.  {Part10}
 )";
 
 	try

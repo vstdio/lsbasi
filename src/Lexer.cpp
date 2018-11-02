@@ -91,6 +91,11 @@ Token Lexer::Advance()
 			++mPos;
 			return { TokenType::Dot };
 		}
+		if (mText[mPos] == ',')
+		{
+			++mPos;
+			return { TokenType::Comma };
+		}
 		if (mText[mPos] == ':')
 		{
 			mPos += 1;
@@ -119,8 +124,7 @@ Token Lexer::ReadAsNumberConstant()
 
 	if (mPos < mText.length() && mText[mPos] == '.')
 	{
-		++mPos;
-		chars += mText[mPos];
+		chars += mText[mPos++];
 
 		while (mPos < mText.length() && std::isdigit(mText[mPos]))
 		{
